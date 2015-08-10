@@ -21,7 +21,6 @@ exec /usr/local/bin/sbcl --noinform --non-interactive --load "$0" "$@"
 (defpackage dpans
   (:use cl)
   (:import-from :alexandria
-                :iota
                 :read-file-into-string
                 :write-string-into-file)
   (:import-from :cl-ppcre
@@ -89,7 +88,7 @@ exec /usr/local/bin/sbcl --noinform --non-interactive --load "$0" "$@"
           (apply #'concatenate 
                  (append (list 'string head "<hr>")
                          (mapcar #'replace-menu
-                                 (mapcar #'link-content (Iterate-on "<li>" menu #'scan-href)))
+                                 (mapcar #'link-content (iterate-on "<li>" menu #'scan-href)))
                          (list tail))))
         ;; a leaf document
         (concatenate 'string src "<hr>"))))
