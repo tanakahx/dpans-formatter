@@ -14,9 +14,10 @@ exec /usr/local/bin/sbcl --noinform --non-interactive --load "$0" "$@"
 (in-package :cl-user)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (ql:quickload :alexandria :silent t)
-  (ql:quickload :cl-fad :silent t)
-  (ql:quickload :cl-ppcre :silent t))
+  (ql:quickload '(:alexandria
+                  :cl-fad
+                  :cl-ppcre)
+                :silent t))
 
 (defpackage dpans
   (:use cl)
@@ -46,7 +47,7 @@ exec /usr/local/bin/sbcl --noinform --non-interactive --load "$0" "$@"
       ("href=\"([^\"#]*)#.*\"" tag)
     tag))
 
-(defun iterate-on (tag menu scanner)
+(defun iterate-on (tag scanner menu)
   "Iterate on each tag"
   (labels ((rec (acc &key (start 0))
              (multiple-value-bind (begin end)
@@ -63,11 +64,6 @@ exec /usr/local/bin/sbcl --noinform --non-interactive --load "$0" "$@"
       ("(?s)<div class=\"node\">.*?</div>(.*)</body>" src)
     content))
 
-(defun link-content (link)
-  "Return the contents of a given link"
-  (let* ((path (merge-pathnames-as-file *src-path* link)))
-    (body-content (read-file-into-string path))))
-
 (defun scan-menu-list (src)
   "Search a <ul> tag which is a menu list except for a dictionary list."
   (multiple-value-bind (begin end)
@@ -77,21 +73,27 @@ exec /usr/local/bin/sbcl --noinform --non-interactive --load "$0" "$@"
               (and dict (< begin dict)))
           (values begin end)))))
 
-(defun replace-menu (src)
-  "Replace menu part in src with its contents in place recursively."
-  (multiple-value-bind (begin end)
-      (scan-menu-list src)
-    (if (and begin end)
-        (let ((menu (subseq src begin end))
-              (head (subseq src 0 begin))
-              (tail (subseq src end (length src))))
-          (apply #'concatenate 
-                 (append (list 'string head "<hr>")
-                         (mapcar #'replace-menu
-                                 (mapcar #'link-content (iterate-on "<li>" menu #'scan-href)))
-                         (list tail))))
-        ;; a leaf document
-        (concatenate 'string src "<hr>"))))
+(defun replace-menu (in-path)
+  "Read file into string and return the string whose menu lists are replaced with its contents recursively."
+  (let ((src (read-file-into-string in-path)))
+    (multiple-value-bind (begin end)
+        (scan-menu-list src)
+      (if (and begin end)
+          (let* ((menu (subseq src begin end))
+                 (head (subseq src 0 begin))
+                 (tail (subseq src end (length src)))
+                 (link-paths (mapcar #'(lambda (p) (merge-pathnames-as-file *src-path* p))
+                                     (iterate-on "<li>" #'scan-href menu))))
+            (format nil "~a<hr>~%~{~a~%~}~a~%"
+                    head
+                    (mapcar #'(lambda (path)
+                                (format nil "<!-- ~a -->~%~a"
+                                        (namestring path)
+                                        (body-content (replace-menu path))))
+                            link-paths)
+                    tail))
+          ;; a leaf document
+          (format nil "~a<hr>~%" src)))))
 
 (defun file-size (path)
   "Return file size in byte"
@@ -102,9 +104,8 @@ exec /usr/local/bin/sbcl --noinform --non-interactive --load "$0" "$@"
   "Set up global parameters."
   (setf *src-path* (pathname-directory-pathname index-path))
   (setf *dst-path* (pathname-as-directory
-                    (concatenate 'string
-                                 (subseq index-path 0 (1- (length (namestring *src-path*))))
-                                 ".formatted")))
+                    (format nil "~a.formatted"
+                                 (subseq index-path 0 (1- (length (namestring *src-path*)))))))
   (setf *index-name* (file-namestring index-path)))
 
 (defun copy-all-files ()
@@ -135,11 +136,11 @@ This can be safely done, becase 'Index.html' is renamed to another name beforeha
         (scan-menu-list index)
       (if (and begin end)
           (let* ((menu (subseq index begin end))
-                 (chapter-list (iterate-on "<li>" menu #'scan-href)))
+                 (chapter-list (iterate-on "<li>" #'scan-href menu)))
             (dolist (c chapter-list)
               (let ((in-path (merge-pathnames-as-file *dst-path* c))
                     (out-path (merge-pathnames-as-file *dst-path* c)))
-                (write-string-into-file (replace-menu (read-file-into-string in-path))
+                (write-string-into-file (replace-menu in-path)
                                         out-path :if-exists :supersede)
                 (format t "Converting Ch. ~27a=> ~54a (~7d bytes)~%"
                         (regex-replace "\.html" c "") out-path (file-size out-path)))))))))
