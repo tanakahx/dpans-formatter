@@ -1,12 +1,13 @@
+#|-*- mode:lisp -*-|#
 #|
-exec /usr/local/bin/sbcl --noinform --non-interactive --load "$0" "$@"
+exec ros -Q -- $0 "$@"
 |#
 
 ;;
 ;; Script for formatting draft proposed American National Standard (dpANS) on Common Lisp
 ;; so that each section has its own contents in place
 ;;
-;; Usage: sbcl dpans-formatter.lisp DPANS_DIRECTORY/DPANS_INDEX_HTML
+;; Usage: ./dpans-formatter.ros DPANS_DIRECTORY/DPANS_INDEX_HTML
 ;;
 ;;        DPANS_DIRECTORY is a top directory of Dpans.
 ;;
@@ -141,7 +142,7 @@ This can be safely done, becase 'Index.html' is renamed to another name beforeha
                 (format t "Converting Ch. ~27a=> ~54a (~7d bytes)~%"
                         (cl-ppcre:regex-replace "\.html" c "") out-path (file-size out-path)))))))))
 
-(defun main (args)
+(defun main (&rest args)
   "args must include pathname of an index HTML file."
   (when (< (length args) 1)
     (format t "USAGE: dpANS index HTML is required as an argument.~%")
@@ -149,5 +150,3 @@ This can be safely done, becase 'Index.html' is renamed to another name beforeha
   (set-params (car args))
   (copy-all-files)
   (flatten-sections-on-chapters))
-
-(main uiop:*command-line-arguments*)
